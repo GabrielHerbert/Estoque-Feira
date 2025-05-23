@@ -1,0 +1,41 @@
+# Relatório de Correção do Botão "Voltar ao Menu" Após Adicionar ou Remover Produtos
+
+## Problema Identificado
+O botão "Voltar ao Menu" após adicionar ou remover produtos não estava funcionando corretamente. Quando o usuário clicava neste botão, o bot não respondia adequadamente, não retornando ao menu principal.
+
+## Análise Realizada
+1. Verificamos o código-fonte do bot no arquivo `telegram_bot.py`.
+2. Identificamos que o botão "Voltar ao Menu" após operações de adição ou remoção de produtos estava sendo criado com o callback_data `estoque_{filial.lower()}` (linha 154).
+3. Quando o usuário adicionava ou removia produtos, o estado da conversa já era alterado para ESTOQUE_LOPES ou ESTOQUE_HERBERT (linhas 368, 372, 377, 381).
+4. O problema estava no fato de que o callback `estoque_{filial.lower()}` não estava sendo processado corretamente nos estados ADICIONAR_PRODUTOS_LOPES, ADICIONAR_PRODUTOS_HERBERT, RETIRAR_PRODUTOS_LOPES e RETIRAR_PRODUTOS_HERBERT.
+
+## Solução Implementada
+1. Modificamos a função `processar_lista_produtos` para usar o callback "voltar_menu_principal" em vez de `estoque_{filial.lower()}`:
+```python
+# Criar teclado para voltar ao menu do estoque
+keyboard = [
+    [InlineKeyboardButton("Voltar ao Menu", callback_data="voltar_menu_principal")]
+]
+reply_markup = InlineKeyboardMarkup(keyboard)
+```
+
+2. Adicionamos CallbackQueryHandlers específicos para o callback "voltar_menu_principal" nos estados ADICIONAR_PRODUTOS_LOPES, ADICIONAR_PRODUTOS_HERBERT, RETIRAR_PRODUTOS_LOPES e RETIRAR_PRODUTOS_HERBERT:
+```python
+ADICIONAR_PRODUTOS_LOPES: [
+    MessageHandler(filters.TEXT & ~filters.COMMAND, adicionar_produtos_lopes),
+    CallbackQueryHandler(menu_callback, pattern="^voltar_menu_principal$"),
+    CallbackQueryHandler(estoque_lopes_callback)
+],
+```
+
+3. Reiniciamos o bot para aplicar as alterações.
+
+## Verificação
+Após as alterações, o bot foi reiniciado e o botão "Voltar ao Menu" após adicionar ou remover produtos deve estar funcionando corretamente. Quando o usuário clicar neste botão, o bot deve exibir o menu principal.
+
+## Recomendações
+1. Implementar testes automatizados para verificar o funcionamento dos callbacks do bot em diferentes estados.
+2. Documentar todos os callbacks e seus respectivos handlers para facilitar a manutenção do código.
+3. Considerar a implementação de um sistema de logging mais detalhado para facilitar a identificação de problemas relacionados aos callbacks.
+4. Padronizar os nomes dos callbacks para evitar confusões e facilitar a manutenção do código.
+5. Considerar a implementação de um sistema de gerenciamento de estados mais robusto para o bot.

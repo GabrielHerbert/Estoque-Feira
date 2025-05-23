@@ -1,0 +1,29 @@
+# Relatório de Correção do Bot de Estoque do Telegram
+
+## Problema Identificado
+O bot do Telegram parou de funcionar após a modificação do código para exibir valores numéricos com 3 casas decimais após a vírgula, em vez de apenas 1 casa decimal.
+
+## Análise Realizada
+1. Verificamos o status do bot e identificamos que ele estava em execução, mas não respondia corretamente.
+2. Examinamos os logs e não encontramos erros específicos relacionados à formatação.
+3. Analisamos o código-fonte e identificamos que a formatação foi alterada de 1 casa decimal para 3 casas decimais no arquivo `estoque_core.py`.
+4. Criamos scripts de teste para verificar se havia problemas com a formatação.
+
+## Solução Implementada
+1. Criamos um backup do arquivo `estoque_core.py` antes de fazer alterações.
+2. Modificamos o arquivo `estoque_core.py` para voltar a exibir valores com 1 casa decimal em vez de 3 casas decimais.
+3. Reiniciamos o bot para aplicar as alterações.
+
+## Alterações Específicas
+No arquivo `estoque_core.py`, alteramos:
+- Linha 335: Substituímos `:<8.3f}` por `:<8.1f}`
+- Linha 346: Substituímos `:<10.3f}` por `:<10.1f}`
+
+## Verificação
+Após as alterações, o bot foi reiniciado e está funcionando corretamente, exibindo os valores numéricos com 1 casa decimal.
+
+## Recomendações
+1. Antes de fazer alterações no código, crie backups dos arquivos originais.
+2. Teste as alterações em um ambiente de desenvolvimento antes de aplicá-las em produção.
+3. Mantenha um registro de todas as alterações feitas no código.
+4. Implemente um sistema de logging mais detalhado para facilitar a identificação de problemas.

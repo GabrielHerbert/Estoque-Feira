@@ -1,0 +1,31 @@
+# Relatório de Correção do Botão "Voltar ao Menu" no Bot do Telegram
+
+## Problema Identificado
+O botão "Voltar ao Menu" (callback_data="voltar_menu_principal") não estava funcionando corretamente no bot do Telegram. Quando o usuário clicava neste botão, o bot não respondia adequadamente.
+
+## Análise Realizada
+1. Verificamos o código-fonte do bot no arquivo `telegram_bot.py`.
+2. Identificamos que o botão "Voltar ao Menu" estava sendo criado corretamente com o callback_data="voltar_menu_principal".
+3. Encontramos handlers para este callback nos estados ESTOQUE_LOPES, ESTOQUE_HERBERT e ESTOQUE_CONJUNTO.
+4. Identificamos que o problema estava no fato de que o handler para o estado MENU_PRINCIPAL não estava configurado para processar o callback "voltar_menu_principal".
+
+## Solução Implementada
+1. Modificamos a função `menu_callback` para tratar explicitamente o callback "voltar_menu_principal".
+2. Adicionamos o seguinte código no início da função `menu_callback`:
+```python
+if query.data == "voltar_menu_principal":
+    await query.edit_message_text(
+        "Escolha uma opção:",
+        reply_markup=criar_menu_principal()
+    )
+    return MENU_PRINCIPAL
+```
+3. Reiniciamos o bot para aplicar as alterações.
+
+## Verificação
+Após as alterações, o bot foi reiniciado e o botão "Voltar ao Menu" deve estar funcionando corretamente. Quando o usuário clicar neste botão, o bot deve exibir o menu principal.
+
+## Recomendações
+1. Implementar testes automatizados para verificar o funcionamento dos callbacks do bot.
+2. Documentar todos os callbacks e seus respectivos handlers para facilitar a manutenção do código.
+3. Considerar a implementação de um sistema de logging mais detalhado para facilitar a identificação de problemas relacionados aos callbacks.
