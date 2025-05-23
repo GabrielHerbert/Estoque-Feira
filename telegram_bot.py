@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 ) = range(9)
 
 # Token do bot
-TOKEN = "7952211429:AAHP8UFrrmd_E96QIZQNwZigd5zjK8VN5QY"
+TOKEN = "Seu token"
 
 # Lista de IDs de usuários autorizados a usar comandos administrativos
 ADMIN_IDS = [
