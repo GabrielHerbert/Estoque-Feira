@@ -4,7 +4,7 @@ import json
 import time
 
 # Token do bot
-TOKEN = "7952211429:AAHP8UFrrmd_E96QIZQNwZigd5zjK8VN5QY"
+TOKEN = ""
 # ID do chat (substitua pelo seu ID de chat)
 CHAT_ID = "123456789"
 
