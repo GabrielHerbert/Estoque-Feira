@@ -59,15 +59,15 @@ class TextProcessor:
         conn.close()
         return produtos
     
-    def normalize_number(self, number_str: str) -> float:
+    def normalize_number(self, number_str: str) -> int:
         """
-        Normaliza uma string de número para um float.
+        Normaliza uma string de número para um inteiro (em gramas).
         
         Args:
             number_str: String contendo um número (pode ter vírgulas, pontos, etc.)
             
         Returns:
-            Número convertido para float
+            Número convertido para inteiro (em gramas)
         """
         # Remove caracteres não numéricos, exceto vírgula e ponto
         clean_str = re.sub(r'[^\d,.]', '', number_str)
@@ -81,9 +81,10 @@ class TextProcessor:
             clean_str = ''.join(parts[:-1]) + '.' + parts[-1]
         
         try:
-            return float(clean_str)
+            # Converte para float e depois para inteiro (gramas)
+            return int(float(clean_str) * 1000)
         except ValueError:
-            return 0.0
+            return 0
     
     def identify_product(self, text: str) -> Optional[int]:
         """

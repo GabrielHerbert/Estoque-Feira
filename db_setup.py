@@ -22,7 +22,7 @@ cursor.execute('''
 CREATE TABLE IF NOT EXISTS estoque_lopes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     produto_id INTEGER NOT NULL,
-    quantidade REAL DEFAULT 0,
+    quantidade INTEGER DEFAULT 0,
     FOREIGN KEY (produto_id) REFERENCES produtos (id)
 )
 ''')
@@ -32,7 +32,23 @@ cursor.execute('''
 CREATE TABLE IF NOT EXISTS estoque_herbert (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     produto_id INTEGER NOT NULL,
-    quantidade REAL DEFAULT 0,
+    quantidade INTEGER DEFAULT 0,
+    FOREIGN KEY (produto_id) REFERENCES produtos (id)
+)
+''')
+
+# Criar tabela para logs de movimentação
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS logs_movimentacao (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    produto_id INTEGER NOT NULL,
+    filial TEXT NOT NULL,
+    operacao TEXT NOT NULL,
+    quantidade INTEGER NOT NULL,
+    quantidade_anterior INTEGER NOT NULL,
+    quantidade_nova INTEGER NOT NULL,
+    data_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    observacao TEXT,
     FOREIGN KEY (produto_id) REFERENCES produtos (id)
 )
 ''')
@@ -74,3 +90,4 @@ conn.commit()
 conn.close()
 
 print("Configuração do banco de dados concluída com sucesso!")
+print("Nova tabela 'logs_movimentacao' criada para registrar todas as movimentações de estoque.")

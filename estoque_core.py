@@ -1,6 +1,6 @@
 
 import sqlite3
-from typing import List, Dict, Any, Optional, Tuple, Union
+from typing import List, Dict, Any, Optional, Tuple
 
 def get_connection():
     """Retorna uma conexão com o banco de dados"""
@@ -43,14 +43,44 @@ def add_produto_catalogo(nome: str) -> int:
     finally:
         conn.close()
 
-def add_to_stock(produto_id: int, quantidade: float, filial: str) -> bool:
+def registrar_log(produto_id: int, filial: str, operacao: str, quantidade: int, 
+                 quantidade_anterior: int, quantidade_nova: int, observacao: str = None) -> None:
+    """
+    Registra uma movimentação no log
+    
+    Args:
+        produto_id: ID do produto
+        filial: Nome da filial
+        operacao: Tipo de operação ('adicionar' ou 'retirar')
+        quantidade: Quantidade movimentada (em gramas)
+        quantidade_anterior: Quantidade antes da operação (em gramas)
+        quantidade_nova: Quantidade após a operação (em gramas)
+        observacao: Observação adicional (opcional)
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            INSERT INTO logs_movimentacao 
+            (produto_id, filial, operacao, quantidade, quantidade_anterior, quantidade_nova, observacao)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (produto_id, filial, operacao, quantidade, quantidade_anterior, quantidade_nova, observacao))
+        conn.commit()
+    except Exception as e:
+        print(f"Erro ao registrar log: {e}")
+    finally:
+        conn.close()
+
+def add_to_stock(produto_id: int, quantidade: int, filial: str, observacao: str = None) -> bool:
     """
     Adiciona uma quantidade de produto ao estoque
     
     Args:
         produto_id: ID do produto
-        quantidade: Quantidade a ser adicionada (em kg)
+        quantidade: Quantidade a ser adicionada (em gramas)
         filial: Nome da filial ('lopes' ou 'herbert')
+        observacao: Observação adicional (opcional)
         
     Returns:
         True se a operação foi bem-sucedida, False caso contrário
@@ -74,17 +104,24 @@ def add_to_stock(produto_id: int, quantidade: float, filial: str) -> bool:
         cursor.execute(f"SELECT quantidade FROM {tabela} WHERE produto_id = ?", (produto_id,))
         resultado = cursor.fetchone()
         
+        quantidade_anterior = 0
         if resultado:
+            quantidade_anterior = resultado[0]
             # Atualizar quantidade
-            nova_quantidade = resultado[0] + quantidade
+            nova_quantidade = quantidade_anterior + quantidade
             cursor.execute(f"UPDATE {tabela} SET quantidade = ? WHERE produto_id = ?", 
                           (nova_quantidade, produto_id))
         else:
             # Inserir novo registro
+            nova_quantidade = quantidade
             cursor.execute(f"INSERT INTO {tabela} (produto_id, quantidade) VALUES (?, ?)", 
                           (produto_id, quantidade))
         
         conn.commit()
+        
+        # Registrar no log
+        registrar_log(produto_id, filial, 'adicionar', quantidade, quantidade_anterior, nova_quantidade, observacao)
+        
         return True
     except Exception as e:
         print(f"Erro ao adicionar ao estoque: {e}")
@@ -92,14 +129,15 @@ def add_to_stock(produto_id: int, quantidade: float, filial: str) -> bool:
     finally:
         conn.close()
 
-def remove_from_stock(produto_id: int, quantidade: float, filial: str) -> bool:
+def remove_from_stock(produto_id: int, quantidade: int, filial: str, observacao: str = None) -> bool:
     """
     Remove uma quantidade de produto do estoque
     
     Args:
         produto_id: ID do produto
-        quantidade: Quantidade a ser removida (em kg)
+        quantidade: Quantidade a ser removida (em gramas)
         filial: Nome da filial ('lopes' ou 'herbert')
+        observacao: Observação adicional (opcional)
         
     Returns:
         True se a operação foi bem-sucedida, False caso contrário
@@ -127,19 +165,23 @@ def remove_from_stock(produto_id: int, quantidade: float, filial: str) -> bool:
             print(f"Produto não encontrado no estoque {filial}")
             return False
         
-        quantidade_atual = resultado[0]
+        quantidade_anterior = resultado[0]
         
         # Verificar se há quantidade suficiente
-        if quantidade_atual < quantidade:
-            print(f"Quantidade insuficiente no estoque. Disponível: {quantidade_atual}, Solicitado: {quantidade}")
+        if quantidade_anterior < quantidade:
+            print(f"Quantidade insuficiente no estoque. Disponível: {quantidade_anterior}, Solicitado: {quantidade}")
             return False
         
         # Atualizar quantidade
-        nova_quantidade = quantidade_atual - quantidade
+        nova_quantidade = quantidade_anterior - quantidade
         cursor.execute(f"UPDATE {tabela} SET quantidade = ? WHERE produto_id = ?", 
                       (nova_quantidade, produto_id))
         
         conn.commit()
+        
+        # Registrar no log
+        registrar_log(produto_id, filial, 'retirar', quantidade, quantidade_anterior, nova_quantidade, observacao)
+        
         return True
     except Exception as e:
         print(f"Erro ao remover do estoque: {e}")
@@ -312,6 +354,100 @@ def search_products(termo: str) -> List[Tuple[int, str]]:
     finally:
         conn.close()
 
+def get_logs_movimentacao(filial: Optional[str] = None, produto_id: Optional[int] = None, 
+                         limite: int = 50) -> List[Dict[str, Any]]:
+    """
+    Obtém logs de movimentação do estoque
+    
+    Args:
+        filial: Filtrar por filial (opcional)
+        produto_id: Filtrar por produto (opcional)
+        limite: Número máximo de registros a retornar
+        
+    Returns:
+        Lista de dicionários com informações dos logs
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        query = """
+        SELECT l.id, p.nome, l.filial, l.operacao, l.quantidade, 
+               l.quantidade_anterior, l.quantidade_nova, l.data_hora, l.observacao
+        FROM logs_movimentacao l
+        JOIN produtos p ON l.produto_id = p.id
+        WHERE 1=1
+        """
+        params = []
+        
+        if filial:
+            query += " AND l.filial = ?"
+            params.append(filial.lower())
+        
+        if produto_id:
+            query += " AND l.produto_id = ?"
+            params.append(produto_id)
+        
+        query += " ORDER BY l.data_hora DESC LIMIT ?"
+        params.append(limite)
+        
+        cursor.execute(query, params)
+        resultados = []
+        
+        for row in cursor.fetchall():
+            resultados.append({
+                'id': row[0],
+                'produto_nome': row[1],
+                'filial': row[2],
+                'operacao': row[3],
+                'quantidade': row[4],
+                'quantidade_anterior': row[5],
+                'quantidade_nova': row[6],
+                'data_hora': row[7],
+                'observacao': row[8]
+            })
+        
+        return resultados
+    finally:
+        conn.close()
+
+def format_logs_message(logs_data: List[Dict[str, Any]], titulo: str = "Logs de Movimentação") -> str:
+    """
+    Formata os dados de logs para exibição no Telegram
+    
+    Args:
+        logs_data: Lista de dicionários com informações dos logs
+        titulo: Título da mensagem
+        
+    Returns:
+        Mensagem formatada
+    """
+    if not logs_data:
+        return f"*{titulo}*\n\nNenhuma movimentação encontrada."
+    
+    mensagem = f"*{titulo}*\n\n"
+    
+    for log in logs_data:
+        data_formatada = log['data_hora'][:16].replace('T', ' ')  # Formato: YYYY-MM-DD HH:MM
+        operacao_emoji = "➕" if log['operacao'] == 'adicionar' else "➖"
+        
+        # Converter de gramas para kg para exibição
+        quantidade_kg = log['quantidade'] / 1000
+        quantidade_anterior_kg = log['quantidade_anterior'] / 1000
+        quantidade_nova_kg = log['quantidade_nova'] / 1000
+        
+        mensagem += f"{operacao_emoji} *{log['produto_nome']}* - {log['filial'].capitalize()}\n"
+        mensagem += f"   Quantidade: {quantidade_kg:.3f} kg\n"
+        mensagem += f"   {quantidade_anterior_kg:.3f} → {quantidade_nova_kg:.3f} kg\n"
+        mensagem += f"   Data: {data_formatada}\n"
+        
+        if log['observacao']:
+            mensagem += f"   Obs: {log['observacao']}\n"
+        
+        mensagem += "\n"
+    
+    return mensagem
+
 # Função para formatar o estoque para exibição no Telegram
 def format_stock_message(estoque_data: List[Dict[str, Any]], titulo: str = "Estoque Atual") -> str:
     """
@@ -332,7 +468,12 @@ def format_stock_message(estoque_data: List[Dict[str, Any]], titulo: str = "Esto
         mensagem += "-" * 55 + "\n"
         
         for item in estoque_data:
-            mensagem += f"{item['id']:<3} {item['nome'][:25]:<25} {item['qtd_lopes']:<8.3f} {item['qtd_herbert']:<8.3f} {item['qtd_total']:<8.3f}\n"
+            # Converter de gramas para kg para exibição
+            qtd_lopes_kg = item['qtd_lopes'] / 1000
+            qtd_herbert_kg = item['qtd_herbert'] / 1000
+            qtd_total_kg = item['qtd_total'] / 1000
+            
+            mensagem += f"{item['id']:<3} {item['nome'][:25]:<25} {qtd_lopes_kg:<8.3f} {qtd_herbert_kg:<8.3f} {qtd_total_kg:<8.3f}\n"
         
         mensagem += "```"
     else:  # Estoque individual
@@ -343,7 +484,9 @@ def format_stock_message(estoque_data: List[Dict[str, Any]], titulo: str = "Esto
         mensagem += "-" * 40 + "\n"
         
         for item in estoque_data:
-            mensagem += f"{item['id']:<3} {item['nome'][:25]:<25} {item['quantidade']:<10.3f}\n"
+            # Converter de gramas para kg para exibição
+            quantidade_kg = item['quantidade'] / 1000
+            mensagem += f"{item['id']:<3} {item['nome'][:25]:<25} {quantidade_kg:<10.3f}\n"
         
         mensagem += "```"
     
