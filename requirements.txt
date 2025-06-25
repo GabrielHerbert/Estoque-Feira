@@ -1,2 +1,18 @@
-python-telegram-bot>=20.0
-rapidfuzz>=3.0.0
+# Dependências do Sistema de Estoque Telegram
+# Versão: 2.1.0
+
+# Bot do Telegram
+python-telegram-bot==20.7
+
+# Banco de dados SQLite (já incluído no Python)
+# sqlite3
+
+# Processamento de texto e data
+# datetime (já incluído no Python)
+# re (já incluído no Python)
+# os (já incluído no Python)
+# sys (já incluído no Python)
+
+# Para instalação em servidor, pode ser necessário:
+# python3-pip
+# python3-venv (opcional, para ambiente virtual)

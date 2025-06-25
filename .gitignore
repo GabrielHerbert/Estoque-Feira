@@ -1,0 +1,20 @@
+# Ignorar banco de dados SQLite
+*.db
+
+# Ignorar arquivos de ambiente Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.env
+
+# Ignorar arquivos de sistema
+.DS_Store
+Thumbs.db
+
+# Ignorar logs
+*.log

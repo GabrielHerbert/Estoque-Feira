@@ -43,18 +43,14 @@ def add_produto_catalogo(nome: str) -> int:
     finally:
         conn.close()
 
-def registrar_log(produto_id: int, filial: str, operacao: str, quantidade: int, 
-                 quantidade_anterior: int, quantidade_nova: int, observacao: str = None) -> None:
+def registrar_operacao(filial: str, operacao: str, mensagem: str, observacao: str = "") -> None:
     """
-    Registra uma movimentação no log
+    Registra uma operação completa no log
     
     Args:
-        produto_id: ID do produto
         filial: Nome da filial
-        operacao: Tipo de operação ('adicionar' ou 'retirar')
-        quantidade: Quantidade movimentada (em gramas)
-        quantidade_anterior: Quantidade antes da operação (em gramas)
-        quantidade_nova: Quantidade após a operação (em gramas)
+        operacao: Tipo de operação ('entrada', 'saida', 'ajuste')
+        mensagem: Mensagem original do usuário
         observacao: Observação adicional (opcional)
     """
     conn = get_connection()
@@ -62,13 +58,13 @@ def registrar_log(produto_id: int, filial: str, operacao: str, quantidade: int,
     
     try:
         cursor.execute("""
-            INSERT INTO logs_movimentacao 
-            (produto_id, filial, operacao, quantidade, quantidade_anterior, quantidade_nova, observacao)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (produto_id, filial, operacao, quantidade, quantidade_anterior, quantidade_nova, observacao))
+            INSERT INTO operacoes 
+            (filial, operacao, mensagem, observacao)
+            VALUES (?, ?, ?, ?)
+        """, (filial, operacao, mensagem, observacao))
         conn.commit()
     except Exception as e:
-        print(f"Erro ao registrar log: {e}")
+        print(f"Erro ao registrar operação: {e}")
     finally:
         conn.close()
 
@@ -118,10 +114,6 @@ def add_to_stock(produto_id: int, quantidade: int, filial: str, observacao: str 
                           (produto_id, quantidade))
         
         conn.commit()
-        
-        # Registrar no log
-        registrar_log(produto_id, filial, 'adicionar', quantidade, quantidade_anterior, nova_quantidade, observacao)
-        
         return True
     except Exception as e:
         print(f"Erro ao adicionar ao estoque: {e}")
@@ -178,10 +170,6 @@ def remove_from_stock(produto_id: int, quantidade: int, filial: str, observacao:
                       (nova_quantidade, produto_id))
         
         conn.commit()
-        
-        # Registrar no log
-        registrar_log(produto_id, filial, 'retirar', quantidade, quantidade_anterior, nova_quantidade, observacao)
-        
         return True
     except Exception as e:
         print(f"Erro ao remover do estoque: {e}")
@@ -502,3 +490,305 @@ if __name__ == "__main__":
     print("Estoque combinado:")
     for item in estoque:
         print(f"{item['nome']}: Lopes={item['qtd_lopes']}, Herbert={item['qtd_herbert']}, Total={item['qtd_total']}")
+
+def gerar_relatorio_estoque(filial: str) -> str:
+    """
+    Gera um relatório de estoque formatado para uma filial específica ou conjunto
+    
+    Args:
+        filial: Nome da filial ('lopes', 'herbert' ou 'conjunto')
+        
+    Returns:
+        String com o relatório formatado
+    """
+    from datetime import datetime
+    
+    if filial.lower() not in ['lopes', 'herbert', 'conjunto']:
+        raise ValueError("Filial deve ser 'lopes', 'herbert' ou 'conjunto'")
+    
+    # Obter dados do estoque
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        data_atual = datetime.now().strftime("%d/%m/%Y")
+        
+        if filial.lower() == 'conjunto':
+            # Relatório conjunto
+            query = """
+            SELECT p.nome, 
+                   COALESCE(el.quantidade, 0) as qtd_lopes, 
+                   COALESCE(eh.quantidade, 0) as qtd_herbert,
+                   COALESCE(el.quantidade, 0) + COALESCE(eh.quantidade, 0) as qtd_total
+            FROM produtos p
+            LEFT JOIN estoque_lopes el ON p.id = el.produto_id
+            LEFT JOIN estoque_herbert eh ON p.id = eh.produto_id
+            WHERE COALESCE(el.quantidade, 0) + COALESCE(eh.quantidade, 0) > 0
+            ORDER BY p.nome
+            """
+            
+            cursor.execute(query)
+            produtos = cursor.fetchall()
+            
+            relatorio = f"ESTOQUE CONJUNTO ({data_atual})\n\n"
+            
+            for nome_produto, qtd_lopes, qtd_herbert, qtd_total in produtos:
+                # Converter de gramas para kg e formatar
+                qtd_total_kg = qtd_total / 1000
+                qtd_lopes_kg = qtd_lopes / 1000
+                qtd_herbert_kg = qtd_herbert / 1000
+                
+                if qtd_total_kg == int(qtd_total_kg):
+                    qtd_total_str = str(int(qtd_total_kg))
+                else:
+                    qtd_total_str = f"{qtd_total_kg:.3f}".rstrip('0').rstrip('.')
+                
+                relatorio += f"{qtd_total_str} {nome_produto.lower()}"
+                
+                # Adicionar detalhes por filial se houver diferença
+                if qtd_lopes > 0 and qtd_herbert > 0:
+                    lopes_str = f"{qtd_lopes_kg:.3f}".rstrip('0').rstrip('.') if qtd_lopes_kg != int(qtd_lopes_kg) else str(int(qtd_lopes_kg))
+                    herbert_str = f"{qtd_herbert_kg:.3f}".rstrip('0').rstrip('.') if qtd_herbert_kg != int(qtd_herbert_kg) else str(int(qtd_herbert_kg))
+                    relatorio += f" (Lopes: {lopes_str}, Herbert: {herbert_str})"
+                elif qtd_lopes > 0:
+                    relatorio += " (apenas Lopes)"
+                elif qtd_herbert > 0:
+                    relatorio += " (apenas Herbert)"
+                
+                relatorio += "\n"
+        else:
+            # Relatório individual
+            tabela = f"estoque_{filial.lower()}"
+            query = f"""
+            SELECT p.nome, es.quantidade
+            FROM produtos p
+            JOIN {tabela} es ON p.id = es.produto_id
+            WHERE es.quantidade > 0
+            ORDER BY p.nome
+            """
+            
+            cursor.execute(query)
+            produtos = cursor.fetchall()
+            
+            nome_filial = filial.upper()
+            relatorio = f"ESTOQUE {nome_filial} ({data_atual})\n\n"
+            
+            for nome_produto, quantidade in produtos:
+                # Converter de gramas para kg e formatar
+                quantidade_kg = quantidade / 1000
+                if quantidade_kg == int(quantidade_kg):
+                    quantidade_str = str(int(quantidade_kg))
+                else:
+                    quantidade_str = f"{quantidade_kg:.3f}".rstrip('0').rstrip('.')
+                
+                relatorio += f"{quantidade_str} {nome_produto.lower()}\n"
+        
+        return relatorio.strip()
+        
+    finally:
+        conn.close()
+
+def remover_produto_catalogo(produto_id: int) -> bool:
+    """
+    Remove um produto do catálogo e de todos os estoques
+    
+    Args:
+        produto_id: ID do produto a ser removido
+        
+    Returns:
+        True se a operação foi bem-sucedida, False caso contrário
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Verificar se o produto existe
+        cursor.execute("SELECT nome FROM produtos WHERE id = ?", (produto_id,))
+        produto = cursor.fetchone()
+        
+        if not produto:
+            print(f"Produto com ID {produto_id} não encontrado")
+            return False
+        
+        nome_produto = produto[0]
+        
+        # Remover do estoque Lopes
+        cursor.execute("DELETE FROM estoque_lopes WHERE produto_id = ?", (produto_id,))
+        
+        # Remover do estoque Herbert
+        cursor.execute("DELETE FROM estoque_herbert WHERE produto_id = ?", (produto_id,))
+        
+        # Remover do catálogo de produtos
+        cursor.execute("DELETE FROM produtos WHERE id = ?", (produto_id,))
+        
+        conn.commit()
+        print(f"Produto '{nome_produto}' (ID: {produto_id}) removido com sucesso do sistema")
+        return True
+        
+    except Exception as e:
+        print(f"Erro ao remover produto: {e}")
+        return False
+    finally:
+        conn.close()
+
+def listar_produtos_com_id() -> List[Dict[str, Any]]:
+    """
+    Lista todos os produtos com seus IDs e quantidades em estoque
+    
+    Returns:
+        Lista de dicionários com informações dos produtos
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        query = """
+        SELECT p.id, p.nome, 
+               COALESCE(el.quantidade, 0) as qtd_lopes, 
+               COALESCE(eh.quantidade, 0) as qtd_herbert,
+               COALESCE(el.quantidade, 0) + COALESCE(eh.quantidade, 0) as qtd_total
+        FROM produtos p
+        LEFT JOIN estoque_lopes el ON p.id = el.produto_id
+        LEFT JOIN estoque_herbert eh ON p.id = eh.produto_id
+        ORDER BY p.nome
+        """
+        
+        cursor.execute(query)
+        produtos = []
+        
+        for row in cursor.fetchall():
+            produtos.append({
+                'id': row[0],
+                'nome': row[1],
+                'qtd_lopes': row[2],
+                'qtd_herbert': row[3],
+                'qtd_total': row[4]
+            })
+        
+        return produtos
+        
+    finally:
+        conn.close()
+
+def processar_mensagem_estoque(mensagem: str, filial: str, operacao: str, itens_processados: List[Dict]) -> bool:
+    """
+    Processa uma mensagem de estoque e registra a operação completa
+    
+    Args:
+        mensagem: Mensagem original do usuário
+        filial: Nome da filial
+        operacao: Tipo de operação ('entrada' ou 'saida')
+        itens_processados: Lista de itens processados pelo text_processor
+        
+    Returns:
+        True se todas as operações foram bem-sucedidas
+    """
+    sucesso_total = True
+    
+    # Processar cada item
+    for item in itens_processados:
+        produto_id = item['produto_id']
+        quantidade = item['quantidade']
+        observacao = item.get('observacao', None)
+        
+        if operacao == 'entrada':
+            resultado = add_to_stock(produto_id, quantidade, filial, observacao)
+        else:  # saida
+            resultado = remove_from_stock(produto_id, quantidade, filial, observacao)
+        
+        if not resultado:
+            sucesso_total = False
+    
+    # Registrar a operação completa no log
+    if sucesso_total:
+        registrar_operacao(filial, operacao, mensagem)
+    
+    return sucesso_total
+
+def get_operacoes(filial: Optional[str] = None, limite: int = 20) -> List[Dict[str, Any]]:
+    """
+    Obtém as operações registradas
+    
+    Args:
+        filial: Nome da filial (opcional, se None retorna todas)
+        limite: Número máximo de registros a retornar
+        
+    Returns:
+        Lista de dicionários com as operações
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        query = "SELECT filial, operacao, mensagem, data_hora, observacao FROM operacoes"
+        params = []
+        
+        if filial:
+            query += " WHERE filial = ?"
+            params.append(filial)
+        
+        query += " ORDER BY data_hora DESC LIMIT ?"
+        params.append(limite)
+        
+        cursor.execute(query, params)
+        
+        operacoes = []
+        for row in cursor.fetchall():
+            operacoes.append({
+                'filial': row[0],
+                'operacao': row[1],
+                'mensagem': row[2],
+                'data_hora': row[3],
+                'observacao': row[4]
+            })
+        
+        return operacoes
+        
+    finally:
+        conn.close()
+
+def format_operacoes_message(operacoes: List[Dict[str, Any]], titulo: str) -> str:
+    """
+    Formata as operações para exibição no Telegram
+    
+    Args:
+        operacoes: Lista de operações
+        titulo: Título da mensagem
+        
+    Returns:
+        String formatada para o Telegram
+    """
+    if not operacoes:
+        return f"*{titulo}*\n\nNenhuma operação encontrada."
+    
+    mensagem = f"*{titulo}*\n\n"
+    
+    for op in operacoes:
+        data_formatada = op['data_hora'][:16].replace('T', ' ')  # YYYY-MM-DD HH:MM
+        filial_emoji = "🏪" if op['filial'].lower() == 'lopes' else "🏬"
+        operacao_emoji = "📥" if op['operacao'] == 'entrada' else "📤"
+        
+        mensagem += f"{filial_emoji} *{op['filial'].capitalize()}* {operacao_emoji} {op['operacao'].capitalize()}\n"
+        mensagem += f"📅 {data_formatada}\n"
+        mensagem += f"📝 {op['mensagem']}\n"
+        
+        if op['observacao']:
+            mensagem += f"💬 {op['observacao']}\n"
+        
+        mensagem += "\n"
+    
+    return mensagem.strip()
+
+# Redefinir as funções de logs para usar o novo sistema
+def get_logs_movimentacao(filial: Optional[str] = None, produto_id: Optional[int] = None, 
+                         limite: int = 50) -> List[Dict[str, Any]]:
+    """
+    Função de compatibilidade - agora usa o sistema de operações
+    """
+    return get_operacoes(filial, limite)
+
+def format_logs_message(logs: List[Dict[str, Any]], titulo: str) -> str:
+    """
+    Função de compatibilidade - redireciona para format_operacoes_message
+    """
+    return format_operacoes_message(logs, titulo)

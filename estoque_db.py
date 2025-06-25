@@ -194,6 +194,59 @@ class EstoqueDB:
         finally:
             conn.close()
 
+
+    def log_operation(self, filial: str, operacao: str, mensagem: str, observacao: str = "") -> None:
+        """
+        Registra uma operação completa na tabela de logs.
+
+        Args:
+            filial: Nome da filial ('Lopes' ou 'Herbert').
+            operacao: Tipo de operação ('entrada', 'saida', 'ajuste').
+            mensagem: A mensagem original do usuário que gerou a operação.
+            observacao: Qualquer observação adicional.
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "INSERT INTO operacoes (filial, operacao, mensagem, observacao) VALUES (?, ?, ?, ?)",
+                (filial, operacao, mensagem, observacao)
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_stock_report(self, estoque: str) -> List[Tuple[str, float]]:
+        """
+        Obtém os dados para o relatório de estoque de uma filial.
+        Retorna apenas produtos com quantidade maior que zero.
+
+        Args:
+            estoque: Nome do estoque ('lopes' ou 'herbert').
+
+        Returns:
+            Lista de tuplas (nome_do_produto, quantidade).
+        """
+        if estoque.lower() not in ['lopes', 'herbert']:
+            raise ValueError("Estoque deve ser 'lopes' ou 'herbert'")
+
+        tabela = f"estoque_{estoque.lower()}"
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            query = f"""
+            SELECT p.nome, es.quantidade
+            FROM produtos p
+            JOIN {tabela} es ON p.id = es.produto_id
+            WHERE es.quantidade > 0
+            ORDER BY p.nome;
+            """
+            cursor.execute(query)
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
 # Exemplo de uso:
 if __name__ == "__main__":
     db = EstoqueDB()

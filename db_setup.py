@@ -37,19 +37,15 @@ CREATE TABLE IF NOT EXISTS estoque_herbert (
 )
 ''')
 
-# Criar tabela para logs de movimentação
+# Criar tabela para logs de operações
 cursor.execute('''
-CREATE TABLE IF NOT EXISTS logs_movimentacao (
+CREATE TABLE IF NOT EXISTS operacoes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    produto_id INTEGER NOT NULL,
     filial TEXT NOT NULL,
     operacao TEXT NOT NULL,
-    quantidade INTEGER NOT NULL,
-    quantidade_anterior INTEGER NOT NULL,
-    quantidade_nova INTEGER NOT NULL,
+    mensagem TEXT NOT NULL,
     data_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    observacao TEXT,
-    FOREIGN KEY (produto_id) REFERENCES produtos (id)
+    observacao TEXT
 )
 ''')
 
